@@ -13,6 +13,25 @@ let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempts = 0;
 
+// ─── Console log forwarding ──────────────────────────────────────────
+// Hook console.log/warn/error to forward logs to daemon via WebSocket.
+
+const _origLog = console.log.bind(console);
+const _origWarn = console.warn.bind(console);
+const _origError = console.error.bind(console);
+
+function forwardLog(level: 'info' | 'warn' | 'error', args: unknown[]): void {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  try {
+    const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+    ws.send(JSON.stringify({ type: 'log', level, msg, ts: Date.now() }));
+  } catch { /* don't recurse */ }
+}
+
+console.log = (...args: unknown[]) => { _origLog(...args); forwardLog('info', args); };
+console.warn = (...args: unknown[]) => { _origWarn(...args); forwardLog('warn', args); };
+console.error = (...args: unknown[]) => { _origError(...args); forwardLog('error', args); };
+
 // ─── WebSocket connection ────────────────────────────────────────────
 
 function connect(): void {

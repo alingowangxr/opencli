@@ -27,6 +27,16 @@ const pending = new Map<string, {
 }>();
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Extension log ring buffer
+interface LogEntry { level: string; msg: string; ts: number; }
+const LOG_BUFFER_SIZE = 200;
+const logBuffer: LogEntry[] = [];
+
+function pushLog(entry: LogEntry): void {
+  logBuffer.push(entry);
+  if (logBuffer.length > LOG_BUFFER_SIZE) logBuffer.shift();
+}
+
 // ─── Idle auto-exit ──────────────────────────────────────────────────
 
 function resetIdleTimer(): void {
@@ -67,6 +77,21 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       extensionConnected: extensionWs?.readyState === WebSocket.OPEN,
       pending: pending.size,
     });
+    return;
+  }
+
+  if (req.method === 'GET' && url === '/logs') {
+    const level = new URL(url, `http://localhost:${PORT}`).searchParams.get('level');
+    const filtered = level
+      ? logBuffer.filter(e => e.level === level)
+      : logBuffer;
+    jsonResponse(res, 200, { ok: true, logs: filtered });
+    return;
+  }
+
+  if (req.method === 'DELETE' && url === '/logs') {
+    logBuffer.length = 0;
+    jsonResponse(res, 200, { ok: true });
     return;
   }
 
@@ -117,12 +142,22 @@ wss.on('connection', (ws) => {
 
   ws.on('message', (data) => {
     try {
-      const result = JSON.parse(data.toString());
-      const p = pending.get(result.id);
+      const msg = JSON.parse(data.toString());
+
+      // Handle log messages from extension
+      if (msg.type === 'log') {
+        const prefix = msg.level === 'error' ? '❌' : msg.level === 'warn' ? '⚠️' : '📋';
+        console.error(`${prefix} [ext] ${msg.msg}`);
+        pushLog({ level: msg.level, msg: msg.msg, ts: msg.ts ?? Date.now() });
+        return;
+      }
+
+      // Handle command results
+      const p = pending.get(msg.id);
       if (p) {
         clearTimeout(p.timer);
-        pending.delete(result.id);
-        p.resolve(result);
+        pending.delete(msg.id);
+        p.resolve(msg);
       }
     } catch {
       // Ignore malformed messages
