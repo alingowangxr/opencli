@@ -1,5 +1,5 @@
 /**
- * opencli Browser Bridge — Service Worker (background script).
+ * OpenCLI — Service Worker (background script).
  *
  * Connects to the opencli daemon via WebSocket, receives commands,
  * dispatches them to Chrome APIs (debugger/tabs/cookies), returns results.
@@ -155,7 +155,7 @@ function initialize(): void {
   chrome.alarms.create('keepalive', { periodInMinutes: 0.4 }); // ~24 seconds
   executor.registerListeners();
   connect();
-  console.log('[opencli] Browser Bridge extension initialized');
+  console.log('[opencli] OpenCLI extension initialized');
 }
 
 chrome.runtime.onInstalled.addListener(() => {
